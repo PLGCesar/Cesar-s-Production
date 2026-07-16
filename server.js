@@ -3,7 +3,13 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const QRCode = require('qrcode');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    Browsers, 
+    fetchLatestBaileysVersion 
+} = require('@whiskeysockets/baileys');
 const pino = require('pino');
 
 const app = express();
@@ -28,49 +34,156 @@ let connectionStatus = "offline"; // offline, qr_needed, connecting, online
 // ----------------------------------------------------
 async function connectToWhatsApp() {
     connectionStatus = "connecting";
+    console.log("Iniciando conexão com o WhatsApp...");
     
-    // Pasta onde serão salvas as credenciais da sessão para não precisar scanear sempre
+    // Pasta onde serão salvas as credenciais da sessão
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
-    sock = makeWASocket({
-        auth: state,
-        logger: pino({ level: 'silent' }), // Deixa o console limpo
-        printQRInTerminal: false // Vamos exibir na tela administrativa, não no CLI
-    });
+    try {
+        // 1. Busca a versão mais atualizada do WhatsApp Web para não ser rejeitado
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`Usando a versão do WhatsApp Web: ${version.join('.')}, isLatest: ${isLatest}`);
 
-    sock.ev.on('creds.update', saveCreds);
+        // 2. Inicializa o socket configurando o Navegador (Essencial para rodar no Render)
+        sock = makeWASocket({
+            auth: state,
+            version: version, // <-- Passa a versão atualizada do WhatsApp
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: false,
+            // <-- Força o bot a se identificar como um Mac Desktop (burlar bloqueio)
+            browser: Browsers.macOS('Desktop'), 
+            connectTimeoutMs: 60000, // Timeout maior para conexões lentas de servidores
+            defaultQueryTimeoutMs: 60000
+        });
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
+        sock.ev.on('creds.update', saveCreds);
 
-        if (qr) {
-            connectionStatus = "qr_needed";
-            // Transforma a string do QR do WhatsApp em imagem base64
-            currentQrBase64 = await QRCode.toDataURL(qr);
-        }
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
 
-        if (connection === 'close') {
-            currentQrBase64 = null;
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            
-            console.log('Conexão fechada. Motivo:', lastDisconnect?.error?.message);
-            connectionStatus = "offline";
-            
-            if (shouldReconnect) {
-                console.log('Tentando reconectar...');
-                connectToWhatsApp();
+            if (qr) {
+                connectionStatus = "qr_needed";
+                currentQrBase64 = await QRCode.toDataURL(qr);
+                console.log("Novo QR Code gerado e disponível para leitura.");
             }
-        } else if (connection === 'open') {
-            console.log('Robô conectado com sucesso no WhatsApp!');
-            currentQrBase64 = null;
-            connectionStatus = "online";
-        }
-    });
 
-    // OUVINTE DE MENSAGENS RECEBIDAS (Onde a mágica do BOT acontece)
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        const msg = messages[0];
-        if (!msg.key.fromMe && msg.message) {
+            if (connection === 'close') {
+                currentQrBase64 = null;
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                
+                console.log('Conexão fechada. Motivo:', lastDisconnect?.error?.message);
+                connectionStatus = "offline";
+                
+                if (shouldReconnect) {
+                    console.log('Aguardando 5 segundos para tentar reconectar...');
+                    setTimeout(connectToWhatsApp, 5000);
+                }
+            } else if (connection === 'open') {
+                console.log('Robô conectado com sucesso no WhatsApp!');
+                currentQrBase64 = null;
+                connectionStatus = "online";
+            }
+        });
+
+        // OUVINTE DE MENSAGENS RECEBIDAS (Onde a mágica do BOT acontece)
+        sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            const msg = messages[0];
+            if (!msg.key.fromMe && msg.message) {
+                const incomingText = msg.message.conversation || 
+                                     msg.message.extendedTextMessage?.text || "";
+                const fromJid = msg.key.remoteJid;
+
+                // Se for um pedido formatado que veio do nosso site
+                if (incomingText.includes("*Novo Pedido -")) {
+                    try {
+                        // Extrai o nome do cliente usando regex
+                        const nomeCliente = incomingText.match(/\*Cliente:\*\s*(.*)/)[1].trim();
+                        
+                        // Resposta automática do bot confirmando
+                        const resposta = `Olá, *${nomeCliente}*! 👋\n\nRecebemos o seu pedido com sucesso!\n\nEle já foi encaminhado para a nossa cozinha e começará a ser preparado agora mesmo. 🍔🛵`;
+                        
+                        await sock.sendMessage(fromJid, { text: resposta });
+                        console.log(`Resposta automática enviada para ${nomeCliente}.`);
+                    } catch (e) {
+                        console.error("Erro ao analisar mensagem de pedido:", e);
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Erro crítico ao tentar inicializar o WhatsApp:", error);
+        connectionStatus = "offline";
+        // Tenta iniciar novamente em 10 segundos em caso de erro de inicialização
+        setTimeout(connectToWhatsApp, 10000);
+    }
+}
+
+// Inicializa o processo do bot em background
+connectToWhatsApp();
+
+// ----------------------------------------------------
+// ROTAS HTTP (API E SERVIÇO DE ARQUIVOS)
+// ----------------------------------------------------
+
+// Rota principal: entrega apenas o index.html na raiz (mantendo server.js protegido)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Endpoint público para buscar o cardápio no Gist
+app.get('/api/menu', async (req, res) => {
+    try {
+        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
+        const fileContent = response.data.files[GIST_FILE_NAME].content;
+        res.json(JSON.parse(fileContent));
+    } catch (error) {
+        console.error("Erro ao buscar cardápio no Gist:", error.message);
+        res.status(500).json({ error: "Erro ao carregar o cardápio." });
+    }
+});
+
+// Endpoint público para ler o QR Code ou status de conexão do Bot
+app.get('/api/qr', (req, res) => {
+    res.json({
+        status: connectionStatus,
+        qr: currentQrBase64 // Retorna a string em Base64 ou null se já conectado
+    });
+});
+
+// Endpoint protegido por senha para salvar as alterações do cardápio
+app.post('/api/menu', async (req, res) => {
+    const { password, menuData } = req.body;
+
+    if (password !== ADMIN_PASSWORD) {
+        return res.status(401).json({ error: "Senha incorreta." });
+    }
+
+    try {
+        await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
+            files: {
+                [GIST_FILE_NAME]: {
+                    content: JSON.stringify(menuData, null, 2)
+                }
+            }
+        }, {
+            headers: {
+                Authorization: `Bearer ${GITHUB_TOKEN}`,
+                Accept: "application/vnd.github+json"
+            }
+        });
+
+        res.json({ success: true, message: "Cardápio atualizado com sucesso!" });
+    } catch (error) {
+        console.error("Erro ao atualizar Gist:", error.response ? error.response.data : error.message);
+        res.status(500).json({ error: "Erro ao salvar as alterações." });
+    }
+});
+
+// Inicialização do Servidor Express
+app.listen(PORT, () => {
+    console.log(`Servidor HTTP rodando com sucesso na porta ${PORT}`);
+});        if (!msg.key.fromMe && msg.message) {
             const incomingText = msg.message.conversation || 
                                  msg.message.extendedTextMessage?.text || "";
             const fromJid = msg.key.remoteJid;
