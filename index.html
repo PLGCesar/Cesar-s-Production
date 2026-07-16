@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardápio Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen pb-24">
+
+    <!-- Header -->
+    <header class="bg-red-600 text-white p-6 shadow-md text-center">
+        <!-- O segredo está aqui: clicar 5 vezes no título ativa o modo admin -->
+        <h1 id="restaurant-name" onclick="triggerAdmin()" class="text-2xl font-bold cursor-pointer select-none">
+            Carregando Lanchonete...
+        </h1>
+        <p class="text-sm opacity-90">Toque no título para acessar o painel administrativo</p>
+    </header>
+
+    <!-- Menu Principal -->
+    <main class="max-w-md mx-auto p-4" id="menu-container">
+        <!-- Os itens serão renderizados aqui via JS -->
+    </main>
+
+    <!-- Modal do Carrinho de Compras -->
+    <div id="cart-bar" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg flex justify-between items-center max-w-md mx-auto hidden">
+        <div>
+            <p class="text-sm text-gray-500">Total do Pedido</p>
+            <p class="text-xl font-bold text-red-600" id="cart-total">R$ 0,00</p>
+        </div>
+        <button onclick="openCheckoutModal()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition">
+            Ver Sacola
+        </button>
+    </div>
+
+    <!-- Modal de Finalização / Dados de Entrega -->
+    <div id="checkout-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold mb-4">Finalizar Pedido</h3>
+            <input type="text" id="cust-name" placeholder="Seu Nome" class="w-full border p-2 rounded mb-3">
+            <input type="text" id="cust-address" placeholder="Endereço de Entrega (ou Retirada)" class="w-full border p-2 rounded mb-3">
+            <select id="payment-method" class="w-full border p-2 rounded mb-4">
+                <option value="Pix">Pix</option>
+                <option value="Cartão de Crédito/Débito">Cartão de Crédito/Débito</option>
+                <option value="Dinheiro">Dinheiro</option>
+            </select>
+            <div class="flex space-x-2">
+                <button onclick="closeCheckoutModal()" class="w-1/2 bg-gray-300 py-2 rounded">Voltar</button>
+                <button onclick="sendWhatsAppOrder()" class="w-1/2 bg-green-600 text-white py-2 rounded font-bold">Enviar no WhatsApp</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Painel Admin Secreto (Modal) -->
+    <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-2">Painel de Configuração</h3>
+            <p class="text-xs text-gray-500 mb-4">Edite o JSON do cardápio diretamente e clique em Salvar.</p>
+            
+            <input type="password" id="admin-pass" placeholder="Senha do Admin" class="w-full border p-2 rounded mb-3">
+            <textarea id="menu-json-editor" class="w-full h-64 border p-2 font-mono text-xs rounded mb-4" placeholder="JSON do cardápio..."></textarea>
+            
+            <div class="flex space-x-2">
+                <button onclick="closeAdmin()" class="w-1/2 bg-gray-300 py-2 rounded">Cancelar</button>
+                <button onclick="saveMenu()" class="w-1/2 bg-red-600 text-white py-2 rounded font-bold">Salvar Alterações</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let menuData = {};
+        let cart = {};
+        let clickCount = 0;
+
+        // Buscar dados do cardápio assim que o app carrega
+        async function loadMenu() {
+            try {
+                const response = await fetch('/api/menu');
+                menuData = await response.json();
+                
+                document.getElementById('restaurant-name').innerText = menuData.restaurantName || "Lanchonete";
+                renderMenu();
+            } catch (error) {
+                alert("Erro ao carregar cardápio. Verifique sua conexão.");
+            }
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menu-container');
+            container.innerHTML = '';
+
+            menuData.categories.forEach(category => {
+                const catHeader = document.createElement('h2');
+                catHeader.className = "text-xl font-bold mt-6 mb-3 border-b-2 border-red-200 pb-1";
+                catHeader.innerText = category.name;
+                container.appendChild(catHeader);
+
+                category.items.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = "bg-white p-4 rounded-lg shadow-sm mb-3 flex justify-between items-center border border-gray-100";
+                    itemDiv.innerHTML = `
+                        <div class="flex-1 pr-4">
+                            <h3 class="font-bold text-gray-800">${item.name}</h3>
+                            <p class="text-xs text-gray-500 mt-1">${item.description || ''}</p>
+                            <p class="text-sm font-semibold text-red-600 mt-2">R$ ${item.price.toFixed(2)}</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="changeQty(${item.id}, -1)" class="bg-gray-200 text-gray-700 px-3 py-1 rounded">-</button>
+                            <span id="qty-${item.id}" class="font-bold">0</span>
+                            <button onclick="changeQty(${item.id}, 1, '${item.name}', ${item.price})" class="bg-red-600 text-white px-3 py-1 rounded">+</button>
+                        </div>
+                    `;
+                    container.appendChild(itemDiv);
+                });
+            });
+        }
+
+        function changeQty(id, delta, name, price) {
+            if (!cart[id]) {
+                if (delta <= 0) return;
+                cart[id] = { id, name, price, qty: 0 };
+            }
+
+            cart[id].qty += delta;
+
+            if (cart[id].qty <= 0) {
+                delete cart[id];
+                document.getElementById(`qty-${id}`).innerText = 0;
+            } else {
+                document.getElementById(`qty-${id}`).innerText = cart[id].qty;
+            }
+
+            updateCartBar();
+        }
+
+        function updateCartBar() {
+            let total = 0;
+            let itemsCount = 0;
+
+            for (let id in cart) {
+                total += cart[id].price * cart[id].qty;
+                itemsCount += cart[id].qty;
+            }
+
+            const cartBar = document.getElementById('cart-bar');
+            if (itemsCount > 0) {
+                cartBar.classList.remove('hidden');
+                document.getElementById('cart-total').innerText = `R$ ${total.toFixed(2)}`;
+            } else {
+                cartBar.classList.add('hidden');
+            }
+        }
+
+        function openCheckoutModal() {
+            document.getElementById('checkout-modal').classList.remove('hidden');
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkout-modal').classList.add('hidden');
+        }
+
+        // Envia as informações do pedido formatadas para o WhatsApp do restaurante
+        function sendWhatsAppOrder() {
+            const name = document.getElementById('cust-name').value.trim();
+            const address = document.getElementById('cust-address').value.trim();
+            const payment = document.getElementById('payment-method').value;
+
+            if (!name || !address) {
+                alert("Por favor, preencha o seu nome e endereço de entrega.");
+                return;
+            }
+
+            let msg = `*Novo Pedido - ${menuData.restaurantName}*\n`;
+            msg += `--------------------------------\n`;
+            msg += `*Cliente:* ${name}\n`;
+            msg += `*Endereço:* ${address}\n`;
+            msg += `*Pagamento:* ${payment}\n`;
+            msg += `--------------------------------\n`;
+            msg += `*Itens:*\n`;
+
+            let total = 0;
+            for (let id in cart) {
+                const subtotal = cart[id].price * cart[id].qty;
+                msg += `- ${cart[id].qty}x ${cart[id].name} (R$ ${subtotal.toFixed(2)})\n`;
+                total += subtotal;
+            }
+
+            msg += `--------------------------------\n`;
+            msg += `*Total Geral: R$ ${total.toFixed(2)}*`;
+
+            const encodedMsg = encodeURIComponent(msg);
+            const whatsappUrl = `https://wa.me/${menuData.phone}?text=${encodedMsg}`;
+
+            window.open(whatsappUrl, '_blank');
+            closeCheckoutModal();
+        }
+
+        // Mecanismo simples do botão invisível/cliques secretos
+        function triggerAdmin() {
+            clickCount++;
+            if (clickCount >= 5) {
+                clickCount = 0;
+                document.getElementById('menu-json-editor').value = JSON.stringify(menuData, null, 2);
+                document.getElementById('admin-modal').classList.remove('hidden');
+            }
+        }
+
+        function closeAdmin() {
+            document.getElementById('admin-modal').classList.add('hidden');
+        }
+
+        async function saveMenu() {
+            const password = document.getElementById('admin-pass').value;
+            let updatedJson;
+
+            try {
+                updatedJson = JSON.parse(document.getElementById('menu-json-editor').value);
+            } catch (e) {
+                alert("JSON inválido! Verifique a estrutura.");
+                return;
+            }
+
+            const response = await fetch('/api/menu', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password, menuData: updatedJson })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert("Salvo com sucesso!");
+                closeAdmin();
+                loadMenu();
+            } else {
+                alert("Falha ao salvar: " + (result.error || "Verifique a senha"));
+            }
+        }
+
+        window.onload = loadMenu;
+    </script>
+</body>
+  </html>
