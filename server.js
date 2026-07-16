@@ -6,18 +6,22 @@ const path = require('path');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 
 // Configurações vindas do ambiente do Render
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // Seu Personal Access Token do GitHub
-const GIST_ID = process.env.GIST_ID;           // O ID do seu Gist criado
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123"; // Senha do painel
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GIST_ID = process.env.GIST_ID;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
 const GIST_FILE_NAME = "menu.json";
 
-// Endpoint para buscar o cardápio (Público)
+// SERVE APENAS O INDEX.HTML (que agora pode ficar solto na raiz)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Endpoint para buscar o cardápio
 app.get('/api/menu', async (req, res) => {
     try {
         const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
