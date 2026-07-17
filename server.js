@@ -28,11 +28,19 @@ const GIST_FILE_NAME = "menu.json";
 let sock = null;
 let currentQrBase64 = null;
 let connectionStatus = "offline"; // offline, qr_needed, connecting, online
+let isConnecting = false; // TRAVA DE SEGURANÇA (Evita loops e múltiplas instâncias)
 
 // ----------------------------------------------------
 // INICIALIZAÇÃO DO BOT (BAILEYS)
 // ----------------------------------------------------
 async function connectToWhatsApp() {
+    // Se já houver uma tentativa de conexão ativa, bloqueia duplicatas
+    if (isConnecting) {
+        console.log("Conexão já em andamento. Ignorando tentativa duplicada.");
+        return;
+    }
+    
+    isConnecting = true;
     connectionStatus = "connecting";
     console.log("Iniciando conexão com o WhatsApp...");
     
@@ -69,10 +77,11 @@ async function connectToWhatsApp() {
 
             if (connection === 'close') {
                 currentQrBase64 = null;
-                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                
-                console.log('Conexão fechada. Motivo:', lastDisconnect?.error?.message);
                 connectionStatus = "offline";
+                isConnecting = false; // LIBERA A TRAVA para permitir uma reconexão segura futura
+                
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                console.log('Conexão fechada. Motivo:', lastDisconnect?.error?.message);
                 
                 if (shouldReconnect) {
                     console.log('Aguardando 5 segundos para tentar reconectar...');
@@ -82,11 +91,11 @@ async function connectToWhatsApp() {
                 console.log('Robô conectado com sucesso no WhatsApp!');
                 currentQrBase64 = null;
                 connectionStatus = "online";
+                isConnecting = false; // LIBERA A TRAVA após conectar com sucesso
             }
         });
 
         // OUVINTE DE MENSAGENS RECEBIDAS (Onde a mágica do BOT acontece)
-        // O 'async' antes de '({ messages, type })' garante que o await funcione lá dentro
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             const msg = messages[0];
             if (!msg.key.fromMe && msg.message) {
@@ -116,7 +125,8 @@ async function connectToWhatsApp() {
     } catch (error) {
         console.error("Erro crítico ao tentar inicializar o WhatsApp:", error);
         connectionStatus = "offline";
-        // Tenta iniciar novamente em 10 segundos em caso de erro de inicialização
+        isConnecting = false; // LIBERA A TRAVA em caso de falha crítica
+        // Tenta iniciar novamente em 10 segundos
         setTimeout(connectToWhatsApp, 10000);
     }
 }
@@ -175,7 +185,7 @@ app.post('/api/menu', async (req, res) => {
             }
         });
 
-        res.json({ success: true, message: "Cardápio updated com sucesso!" });
+        res.json({ success: true, message: "Cardápio atualizado com sucesso!" });
     } catch (error) {
         console.error("Erro ao atualizar Gist:", error.response ? error.response.data : error.message);
         res.status(500).json({ error: "Erro ao salvar as alterações." });
