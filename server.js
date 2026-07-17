@@ -86,6 +86,7 @@ async function connectToWhatsApp() {
         });
 
         // OUVINTE DE MENSAGENS RECEBIDAS (Onde a mágica do BOT acontece)
+        // O 'async' antes de '({ messages, type })' garante que o await funcione lá dentro
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             const msg = messages[0];
             if (!msg.key.fromMe && msg.message) {
@@ -102,6 +103,7 @@ async function connectToWhatsApp() {
                         // Resposta automática do bot confirmando
                         const resposta = `Olá, *${nomeCliente}*! 👋\n\nRecebemos o seu pedido com sucesso!\n\nEle já foi encaminhado para a nossa cozinha e começará a ser preparado agora mesmo. 🍔🛵`;
                         
+                        // Envia a mensagem de confirmação de forma assíncrona
                         await sock.sendMessage(fromJid, { text: resposta });
                         console.log(`Resposta automática enviada para ${nomeCliente}.`);
                     } catch (e) {
@@ -173,7 +175,7 @@ app.post('/api/menu', async (req, res) => {
             }
         });
 
-        res.json({ success: true, message: "Cardápio atualizado com sucesso!" });
+        res.json({ success: true, message: "Cardápio updated com sucesso!" });
     } catch (error) {
         console.error("Erro ao atualizar Gist:", error.response ? error.response.data : error.message);
         res.status(500).json({ error: "Erro ao salvar as alterações." });
@@ -183,88 +185,4 @@ app.post('/api/menu', async (req, res) => {
 // Inicialização do Servidor Express
 app.listen(PORT, () => {
     console.log(`Servidor HTTP rodando com sucesso na porta ${PORT}`);
-});        if (!msg.key.fromMe && msg.message) {
-            const incomingText = msg.message.conversation || 
-                                 msg.message.extendedTextMessage?.text || "";
-            const fromJid = msg.key.remoteJid;
-
-            // Se for um pedido formatado que veio do nosso site
-            if (incomingText.includes("*Novo Pedido -")) {
-                try {
-                    // Extrai o nome do cliente usando regex simples
-                    const nomeCliente = incomingText.match(/\*Cliente:\*\s*(.*)/)[1].trim();
-                    
-                    // Resposta automática do bot confirmando
-                    const resposta = `Olá, *${nomeCliente}*! 👋\n\nRecebemos o seu pedido com sucesso!\n\nEle já foi encaminhado para a nossa cozinha e começará a ser preparado agora mesmo. 🍔🛵`;
-                    
-                    await sock.sendMessage(fromJid, { text: resposta });
-                } catch (e) {
-                    console.error("Erro ao analisar mensagem de pedido:", e);
-                }
-            }
-        }
-    });
-}
-
-// Inicia o processo em background
-connectToWhatsApp();
-
-// ----------------------------------------------------
-// ROTAS HTTP (API E FRONTEND)
-// ----------------------------------------------------
-
-// Serve o index.html na raiz
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// Endpoint público para buscar o cardápio
-app.get('/api/menu', async (req, res) => {
-    try {
-        const response = await axios.get(`https://api.github.com/gists/${GIST_ID}`);
-        const fileContent = response.data.files[GIST_FILE_NAME].content;
-        res.json(JSON.parse(fileContent));
-    } catch (error) {
-        res.status(500).json({ error: "Erro ao carregar o cardápio." });
-    }
-});
-
-// Endpoint público para ler o QR Code ou status do Bot
-app.get('/api/qr', (req, res) => {
-    res.json({
-        status: connectionStatus,
-        qr: currentQrBase64 // Retorna a imagem em Base64 ou null
-    });
-});
-
-// Endpoint protegido para salvar as alterações do cardápio
-app.post('/api/menu', async (req, res) => {
-    const { password, menuData } = req.body;
-
-    if (password !== ADMIN_PASSWORD) {
-        return res.status(401).json({ error: "Senha incorreta." });
-    }
-
-    try {
-        await axios.patch(`https://api.github.com/gists/${GIST_ID}`, {
-            files: {
-                [GIST_FILE_NAME]: {
-                    content: JSON.stringify(menuData, null, 2)
-                }
-            }
-        }, {
-            headers: {
-                Authorization: `Bearer ${GITHUB_TOKEN}`,
-                Accept: "application/vnd.github+json"
-            }
-        });
-
-        res.json({ success: true, message: "Cardápio atualizado!" });
-    } catch (error) {
-        res.status(500).json({ error: "Erro ao salvar alterações no Gist." });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
 });
