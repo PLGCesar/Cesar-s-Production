@@ -85,6 +85,7 @@
         </div>
     </div>
 
+    <!-- Todo o código dinâmico JavaScript fica protegido aqui dentro -->
     <script>
         let menuData = {};
         let cart = {};
@@ -258,6 +259,7 @@
             qrInterval = setInterval(checkWhatsAppStatus, 5000);
         }
 
+        // Para o polling para liberar tráfego do servidor
         function stopQrPolling() {
             if (qrInterval) {
                 clearInterval(qrInterval);
@@ -312,173 +314,4 @@
         window.onload = loadMenu;
     </script>
 </body>
-</html>        let clickCount = 0;
-
-        // Buscar dados do cardápio assim que o app carrega
-        async function loadMenu() {
-            try {
-                const response = await fetch('/api/menu');
-                menuData = await response.json();
-                
-                document.getElementById('restaurant-name').innerText = menuData.restaurantName || "Lanchonete";
-                renderMenu();
-            } catch (error) {
-                alert("Erro ao carregar cardápio. Verifique sua conexão.");
-            }
-        }
-
-        function renderMenu() {
-            const container = document.getElementById('menu-container');
-            container.innerHTML = '';
-
-            menuData.categories.forEach(category => {
-                const catHeader = document.createElement('h2');
-                catHeader.className = "text-xl font-bold mt-6 mb-3 border-b-2 border-red-200 pb-1";
-                catHeader.innerText = category.name;
-                container.appendChild(catHeader);
-
-                category.items.forEach(item => {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = "bg-white p-4 rounded-lg shadow-sm mb-3 flex justify-between items-center border border-gray-100";
-                    itemDiv.innerHTML = `
-                        <div class="flex-1 pr-4">
-                            <h3 class="font-bold text-gray-800">${item.name}</h3>
-                            <p class="text-xs text-gray-500 mt-1">${item.description || ''}</p>
-                            <p class="text-sm font-semibold text-red-600 mt-2">R$ ${item.price.toFixed(2)}</p>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <button onclick="changeQty(${item.id}, -1)" class="bg-gray-200 text-gray-700 px-3 py-1 rounded">-</button>
-                            <span id="qty-${item.id}" class="font-bold">0</span>
-                            <button onclick="changeQty(${item.id}, 1, '${item.name}', ${item.price})" class="bg-red-600 text-white px-3 py-1 rounded">+</button>
-                        </div>
-                    `;
-                    container.appendChild(itemDiv);
-                });
-            });
-        }
-
-        function changeQty(id, delta, name, price) {
-            if (!cart[id]) {
-                if (delta <= 0) return;
-                cart[id] = { id, name, price, qty: 0 };
-            }
-
-            cart[id].qty += delta;
-
-            if (cart[id].qty <= 0) {
-                delete cart[id];
-                document.getElementById(`qty-${id}`).innerText = 0;
-            } else {
-                document.getElementById(`qty-${id}`).innerText = cart[id].qty;
-            }
-
-            updateCartBar();
-        }
-
-        function updateCartBar() {
-            let total = 0;
-            let itemsCount = 0;
-
-            for (let id in cart) {
-                total += cart[id].price * cart[id].qty;
-                itemsCount += cart[id].qty;
-            }
-
-            const cartBar = document.getElementById('cart-bar');
-            if (itemsCount > 0) {
-                cartBar.classList.remove('hidden');
-                document.getElementById('cart-total').innerText = `R$ ${total.toFixed(2)}`;
-            } else {
-                cartBar.classList.add('hidden');
-            }
-        }
-
-        function openCheckoutModal() {
-            document.getElementById('checkout-modal').classList.remove('hidden');
-        }
-
-        function closeCheckoutModal() {
-            document.getElementById('checkout-modal').classList.add('hidden');
-        }
-
-        // Envia as informações do pedido formatadas para o WhatsApp do restaurante
-        function sendWhatsAppOrder() {
-            const name = document.getElementById('cust-name').value.trim();
-            const address = document.getElementById('cust-address').value.trim();
-            const payment = document.getElementById('payment-method').value;
-
-            if (!name || !address) {
-                alert("Por favor, preencha o seu nome e endereço de entrega.");
-                return;
-            }
-
-            let msg = `*Novo Pedido - ${menuData.restaurantName}*\n`;
-            msg += `--------------------------------\n`;
-            msg += `*Cliente:* ${name}\n`;
-            msg += `*Endereço:* ${address}\n`;
-            msg += `*Pagamento:* ${payment}\n`;
-            msg += `--------------------------------\n`;
-            msg += `*Itens:*\n`;
-
-            let total = 0;
-            for (let id in cart) {
-                const subtotal = cart[id].price * cart[id].qty;
-                msg += `- ${cart[id].qty}x ${cart[id].name} (R$ ${subtotal.toFixed(2)})\n`;
-                total += subtotal;
-            }
-
-            msg += `--------------------------------\n`;
-            msg += `*Total Geral: R$ ${total.toFixed(2)}*`;
-
-            const encodedMsg = encodeURIComponent(msg);
-            const whatsappUrl = `https://wa.me/${menuData.phone}?text=${encodedMsg}`;
-
-            window.open(whatsappUrl, '_blank');
-            closeCheckoutModal();
-        }
-
-        // Mecanismo simples do botão invisível/cliques secretos
-        function triggerAdmin() {
-            clickCount++;
-            if (clickCount >= 5) {
-                clickCount = 0;
-                document.getElementById('menu-json-editor').value = JSON.stringify(menuData, null, 2);
-                document.getElementById('admin-modal').classList.remove('hidden');
-            }
-        }
-
-        function closeAdmin() {
-            document.getElementById('admin-modal').classList.add('hidden');
-        }
-
-        async function saveMenu() {
-            const password = document.getElementById('admin-pass').value;
-            let updatedJson;
-
-            try {
-                updatedJson = JSON.parse(document.getElementById('menu-json-editor').value);
-            } catch (e) {
-                alert("JSON inválido! Verifique a estrutura.");
-                return;
-            }
-
-            const response = await fetch('/api/menu', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password, menuData: updatedJson })
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                alert("Salvo com sucesso!");
-                closeAdmin();
-                loadMenu();
-            } else {
-                alert("Falha ao salvar: " + (result.error || "Verifique a senha"));
-            }
-        }
-
-        window.onload = loadMenu;
-    </script>
-</body>
-  </html>
+</html>
