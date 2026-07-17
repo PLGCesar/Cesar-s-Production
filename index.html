@@ -8,16 +8,19 @@
 </head>
 <body class="bg-gray-50 text-gray-800 min-h-screen pb-24">
 
-    <!-- Header -->
-    <header class="bg-red-600 text-white p-6 shadow-md text-center">
-        <!-- Toque 5 vezes no título para abrir o Admin -->
-        <h1 id="restaurant-name" onclick="triggerAdmin()" class="text-2xl font-bold cursor-pointer select-none">
-            Carregando Lanchonete...
-        </h1>
-        <p class="text-sm opacity-90">Toque 5 vezes no título para o painel de controle</p>
+    <!-- Header com os dois logos laterais -->
+    <header class="bg-red-600 text-white p-4 shadow-md flex items-center justify-center gap-4">
+        <img id="logo-left" src="" class="w-12 h-12 rounded-full border border-white object-cover hidden" alt="Logo L" />
+        <div class="text-center">
+            <h1 id="restaurant-name" onclick="triggerAdmin()" class="text-2xl font-bold cursor-pointer select-none">
+                Carregando Lanchonete...
+            </h1>
+            <p class="text-xs opacity-90">Toque 5 vezes no título para o painel de controle</p>
+        </div>
+        <img id="logo-right" src="" class="w-12 h-12 rounded-full border border-white object-cover hidden" alt="Logo R" />
     </header>
 
-    <!-- Menu Principal -->
+    <!-- Menu Principal (Sem imagens nos itens - Leve e limpo) -->
     <main class="max-w-md mx-auto p-4" id="menu-container">
         <!-- Os itens serão renderizados aqui dinamicamente -->
     </main>
@@ -33,10 +36,16 @@
         </button>
     </div>
 
-    <!-- Modal de Finalização / Dados de Entrega -->
+    <!-- Modal de Finalização (Na hora do Pedido - Exibe a imagem de instrução/Pix se houver) -->
     <div id="checkout-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h3 class="text-lg font-bold mb-4">Finalizar Pedido</h3>
+        <div class="bg-white rounded-lg p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 class="text-lg font-bold mb-3">Finalizar Pedido</h3>
+            
+            <!-- Imagem de Destaque no Checkout (Ex: QR Code Pix do estabelecimento) -->
+            <div id="checkout-img-container" class="mb-4 hidden">
+                <img id="checkout-img" src="" class="w-full rounded-lg border object-contain max-h-48" alt="Instruções de Pagamento / Pix" />
+            </div>
+            
             <input type="text" id="cust-name" placeholder="Seu Nome" class="w-full border p-2 rounded mb-3">
             <input type="text" id="cust-address" placeholder="Endereço de Entrega (ou Retirada)" class="w-full border p-2 rounded mb-3">
             <select id="payment-method" class="w-full border p-2 rounded mb-4">
@@ -55,19 +64,27 @@
     <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 class="text-lg font-bold mb-2 text-red-600">Painel de Controle</h3>
-            <p class="text-xs text-gray-500 mb-4">Gerencie as informações básicas e os produtos do cardápio.</p>
+            <p class="text-xs text-gray-500 mb-4">Gerencie as informações básicas e as fotos do estabelecimento.</p>
             
             <!-- Senha de Segurança -->
             <label class="block text-xs font-bold text-gray-700 mb-1">Senha do Admin</label>
             <input type="password" id="admin-pass" placeholder="Digite a senha para salvar" class="w-full border p-2 rounded mb-4">
             
-            <!-- Campo simples para Nome da Lanchonete -->
+            <!-- Nome da Lanchonete -->
             <label class="block text-xs font-bold text-gray-700 mb-1">Nome da Lanchonete</label>
             <input type="text" id="admin-restaurant-name" class="w-full border p-2 rounded mb-4">
             
-            <!-- Campo simples para o Número do WhatsApp -->
+            <!-- Número do WhatsApp -->
             <label class="block text-xs font-bold text-gray-700 mb-1">WhatsApp do Estabelecimento (Ex: 5511999999999)</label>
             <input type="text" id="admin-phone" class="w-full border p-2 rounded mb-4" placeholder="Código do país + DDD + Número">
+            
+            <!-- ENVIAR LOGOTIPO DO HEADER (Fica dos lados do título) -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">Logotipo do Estabelecimento (Header)</label>
+            <input type="file" id="upload-logo" accept="image/*" class="text-xs border p-1 rounded w-full mb-4 bg-gray-50">
+            
+            <!-- ENVIAR IMAGEM DO CHECKOUT (Ex: Pix QR Code ou Informativo) -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">Imagem na Hora do Pedido (Ex: QR Code Pix)</label>
+            <input type="file" id="upload-checkout" accept="image/*" class="text-xs border p-1 rounded w-full mb-4 bg-gray-50">
             
             <!-- Editor das Categorias e Produtos (JSON) -->
             <label class="block text-xs font-bold text-gray-700 mb-1">Produtos e Categorias (JSON)</label>
@@ -92,13 +109,28 @@
                 menuData = await response.json();
                 
                 document.getElementById('restaurant-name').innerText = menuData.restaurantName || "Lanchonete";
+                
+                // Renderização dos Logos laterais no Header se existirem
+                const logoLeft = document.getElementById('logo-left');
+                const logoRight = document.getElementById('logo-right');
+                
+                if (menuData.logo) {
+                    logoLeft.src = menuData.logo;
+                    logoLeft.classList.remove('hidden');
+                    logoRight.src = menuData.logo;
+                    logoRight.classList.remove('hidden');
+                } else {
+                    logoLeft.classList.add('hidden');
+                    logoRight.classList.add('hidden');
+                }
+
                 renderMenu();
             } catch (error) {
                 alert("Erro ao carregar cardápio. Verifique a conexão.");
             }
         }
 
-        // Renderiza as categorias e itens do cardápio dinamicamente
+        // Renderiza as categorias e itens do cardápio dinamicamente (Texto limpo)
         function renderMenu() {
             const container = document.getElementById('menu-container');
             container.innerHTML = '';
@@ -113,14 +145,15 @@
 
                 category.items.forEach(item => {
                     const itemDiv = document.createElement('div');
-                    itemDiv.className = "bg-white p-4 rounded-lg shadow-sm mb-3 flex justify-between items-center border border-gray-100";
+                    itemDiv.className = "bg-white p-4 rounded-lg shadow-sm mb-3 flex justify-between items-center border border-gray-100 gap-3";
+                    
                     itemDiv.innerHTML = `
-                        <div class="flex-1 pr-4">
-                            <h3 class="font-bold text-gray-800">${item.name}</h3>
-                            <p class="text-xs text-gray-500 mt-1">${item.description || ''}</p>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="font-bold text-gray-800 truncate">${item.name}</h3>
+                            <p class="text-xs text-gray-500 mt-1 line-clamp-2">${item.description || ''}</p>
                             <p class="text-sm font-semibold text-red-600 mt-2">R$ ${item.price.toFixed(2)}</p>
                         </div>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center space-x-2 flex-shrink-0">
                             <button onclick="changeQty(${item.id}, -1)" class="bg-gray-200 text-gray-700 px-3 py-1 rounded font-bold">-</button>
                             <span id="qty-${item.id}" class="font-bold w-4 text-center">0</span>
                             <button onclick="changeQty(${item.id}, 1, '${item.name}', ${item.price})" class="bg-red-600 text-white px-3 py-1 rounded font-bold">+</button>
@@ -169,7 +202,18 @@
             }
         }
 
+        // Abre o checkout e insere a imagem de pagamento (Pix) se houver
         function openCheckoutModal() {
+            const checkImgContainer = document.getElementById('checkout-img-container');
+            const checkImg = document.getElementById('checkout-img');
+
+            if (menuData.checkoutImage) {
+                checkImg.src = menuData.checkoutImage;
+                checkImgContainer.classList.remove('hidden');
+            } else {
+                checkImgContainer.classList.add('hidden');
+            }
+
             document.getElementById('checkout-modal').classList.remove('hidden');
         }
 
@@ -223,7 +267,7 @@
                 document.getElementById('admin-restaurant-name').value = menuData.restaurantName || "";
                 document.getElementById('admin-phone').value = menuData.phone || "";
                 
-                // Exibe apenas as categorias no editor JSON para evitar que quebrem as propriedades principais
+                // Exibe apenas as categorias no editor JSON para manter limpo
                 document.getElementById('menu-json-editor').value = JSON.stringify(menuData.categories || [], null, 2);
                 
                 document.getElementById('admin-modal').classList.remove('hidden');
@@ -253,10 +297,12 @@
                 return;
             }
 
-            // Monta o objeto final do cardápio de forma organizada
+            // Monta o objeto final preservando as fotos que estão no menuData local
             const finalMenuData = {
                 restaurantName: nameInput,
                 phone: phoneInput,
+                logo: menuData.logo || "",
+                checkoutImage: menuData.checkoutImage || "",
                 categories: categoriesJson
             };
 
@@ -275,6 +321,53 @@
                 alert("Falha ao salvar: " + (result.error || "Verifique a senha"));
             }
         }
+
+        // ----------------------------------------------------
+        // COMPRESSÃO E UPLOAD AUTOMÁTICO DE FOTOS NO ADMIN
+        // ----------------------------------------------------
+        function compressAndSaveLocalImage(file, key) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 300; // Redimensiona o logotipo/checkout para manter super leve
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Converte para JPEG leve com 70% de qualidade
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                    
+                    // Salva de forma reativa no objeto local menuData
+                    menuData[key] = compressedBase64;
+                    alert(`Imagem de ${key === 'logo' ? 'Logo' : 'Checkout'} processada com sucesso! Digite a senha administrativa e clique em 'Salvar Alterações' no rodapé para enviar.`);
+                }
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Escuta os inputs de Upload e dispara o compressor
+        document.getElementById('upload-logo').addEventListener('change', function(e) {
+            compressAndSaveLocalImage(e.target.files[0], 'logo');
+        });
+
+        document.getElementById('upload-checkout').addEventListener('change', function(e) {
+            compressAndSaveLocalImage(e.target.files[0], 'checkoutImage');
+        });
 
         window.onload = loadMenu;
     </script>
