@@ -10,7 +10,7 @@
 
     <!-- Header -->
     <header class="bg-red-600 text-white p-6 shadow-md text-center">
-        <!-- O segredo de 5 cliques para abrir o Admin está aqui -->
+        <!-- Toque 5 vezes no título para abrir o Admin -->
         <h1 id="restaurant-name" onclick="triggerAdmin()" class="text-2xl font-bold cursor-pointer select-none">
             Carregando Lanchonete...
         </h1>
@@ -54,29 +54,24 @@
     <!-- Painel Admin Secreto (Modal) -->
     <div id="admin-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
-            <h3 class="text-lg font-bold mb-2 text-red-600">Painel de Configuração</h3>
-            <p class="text-xs text-gray-500 mb-4">Edite o JSON do cardápio e gerencie o Bot de WhatsApp.</p>
+            <h3 class="text-lg font-bold mb-2 text-red-600">Painel de Controle</h3>
+            <p class="text-xs text-gray-500 mb-4">Gerencie as informações básicas e os produtos do cardápio.</p>
             
-            <!-- Editor do JSON do Cardápio -->
-            <input type="password" id="admin-pass" placeholder="Senha do Admin" class="w-full border p-2 rounded mb-3">
-            <textarea id="menu-json-editor" class="w-full h-48 border p-2 font-mono text-xs rounded mb-4" placeholder="JSON do cardápio..."></textarea>
+            <!-- Senha de Segurança -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">Senha do Admin</label>
+            <input type="password" id="admin-pass" placeholder="Digite a senha para salvar" class="w-full border p-2 rounded mb-4">
             
-            <!-- Seção do QR Code do WhatsApp -->
-            <div class="border-t pt-4 mt-2 mb-4">
-                <h4 class="font-bold text-sm text-gray-700 mb-2">Sincronizar WhatsApp (Bot)</h4>
-                <div class="flex flex-col items-center bg-gray-50 p-4 rounded border">
-                    <div id="wa-status-badge" class="text-xs px-2 py-1 rounded font-bold mb-3 bg-gray-200 text-gray-600">
-                        Verificando status...
-                    </div>
-                    <!-- Imagem do QR Code Base64 aparecerá aqui -->
-                    <div id="qr-container" class="w-48 h-48 bg-white flex items-center justify-center border rounded shadow-inner overflow-hidden">
-                        <span class="text-xs text-gray-400">Aguardando...</span>
-                    </div>
-                    <button onclick="checkWhatsAppStatus()" class="mt-3 text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition">
-                        Forçar Atualização
-                    </button>
-                </div>
-            </div>
+            <!-- Campo simples para Nome da Lanchonete -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">Nome da Lanchonete</label>
+            <input type="text" id="admin-restaurant-name" class="w-full border p-2 rounded mb-4">
+            
+            <!-- Campo simples para o Número do WhatsApp -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">WhatsApp do Estabelecimento (Ex: 5511999999999)</label>
+            <input type="text" id="admin-phone" class="w-full border p-2 rounded mb-4" placeholder="Código do país + DDD + Número">
+            
+            <!-- Editor das Categorias e Produtos (JSON) -->
+            <label class="block text-xs font-bold text-gray-700 mb-1">Produtos e Categorias (JSON)</label>
+            <textarea id="menu-json-editor" class="w-full h-48 border p-2 font-mono text-xs rounded mb-4" placeholder="Categorias do cardápio..."></textarea>
             
             <div class="flex space-x-2">
                 <button onclick="closeAdmin()" class="w-1/2 bg-gray-300 py-2 rounded transition">Cancelar</button>
@@ -85,12 +80,10 @@
         </div>
     </div>
 
-    <!-- Todo o código dinâmico JavaScript fica protegido aqui dentro -->
     <script>
         let menuData = {};
         let cart = {};
         let clickCount = 0;
-        let qrInterval = null;
 
         // Buscar dados do cardápio ao iniciar a página
         async function loadMenu() {
@@ -109,6 +102,8 @@
         function renderMenu() {
             const container = document.getElementById('menu-container');
             container.innerHTML = '';
+
+            if (!menuData.categories) return;
 
             menuData.categories.forEach(category => {
                 const catHeader = document.createElement('h2');
@@ -182,7 +177,7 @@
             document.getElementById('checkout-modal').classList.add('hidden');
         }
 
-        // Formata a mensagem e abre o WhatsApp do cliente para enviar o pedido
+        // Formata a mensagem e abre o WhatsApp para enviar o pedido
         function sendWhatsAppOrder() {
             const name = document.getElementById('cust-name').value.trim();
             const address = document.getElementById('cust-address').value.trim();
@@ -218,92 +213,62 @@
             closeCheckoutModal();
         }
 
-        // ----------------------------------------------------
-        // ADMIN E ROTAS DO BOT DO WHATSAPP
-        // ----------------------------------------------------
-
-        // Monitoramento em tempo real do status do robô e do QR Code
-        async function checkWhatsAppStatus() {
-            try {
-                const response = await fetch('/api/qr');
-                const data = await response.json();
-                
-                const badge = document.getElementById('wa-status-badge');
-                const qrContainer = document.getElementById('qr-container');
-
-                if (data.status === "online") {
-                    badge.innerText = "CONECTADO";
-                    badge.className = "text-xs px-2 py-1 rounded font-bold mb-3 bg-green-100 text-green-800";
-                    qrContainer.innerHTML = `<span class="text-xs text-green-600 font-bold text-center px-4">Bot ativo e operando com sucesso!</span>`;
-                } else if (data.status === "qr_needed" && data.qr) {
-                    badge.innerText = "AGUARDANDO LEITURA";
-                    badge.className = "text-xs px-2 py-1 rounded font-bold mb-3 bg-yellow-100 text-yellow-800";
-                    qrContainer.innerHTML = `<img src="${data.qr}" class="w-full h-full object-contain" />`;
-                } else if (data.status === "connecting") {
-                    badge.innerText = "CONECTANDO...";
-                    badge.className = "text-xs px-2 py-1 rounded font-bold mb-3 bg-blue-100 text-blue-800";
-                    qrContainer.innerHTML = `<span class="text-xs text-blue-400">Verificando conexões...</span>`;
-                } else {
-                    badge.innerText = "DESCONECTADO";
-                    badge.className = "text-xs px-2 py-1 rounded font-bold mb-3 bg-gray-100 text-gray-600";
-                    qrContainer.innerHTML = `<span class="text-xs text-gray-400">Sem QR Code gerado</span>`;
-                }
-            } catch (e) {
-                console.error("Erro ao verificar status do robô de WhatsApp:", e);
-            }
-        }
-
-        // Inicia o pooling de verificação do status a cada 5s ao abrir o admin
-        function startQrPolling() {
-            checkWhatsAppStatus();
-            qrInterval = setInterval(checkWhatsAppStatus, 5000);
-        }
-
-        // Para o polling para liberar tráfego do servidor
-        function stopQrPolling() {
-            if (qrInterval) {
-                clearInterval(qrInterval);
-                qrInterval = null;
-            }
-        }
-
         // Abre o modal administrativo se o título for clicado 5 vezes
         function triggerAdmin() {
             clickCount++;
             if (clickCount >= 5) {
                 clickCount = 0;
-                document.getElementById('menu-json-editor').value = JSON.stringify(menuData, null, 2);
+                
+                // Preenche os campos simples
+                document.getElementById('admin-restaurant-name').value = menuData.restaurantName || "";
+                document.getElementById('admin-phone').value = menuData.phone || "";
+                
+                // Exibe apenas as categorias no editor JSON para evitar que quebrem as propriedades principais
+                document.getElementById('menu-json-editor').value = JSON.stringify(menuData.categories || [], null, 2);
+                
                 document.getElementById('admin-modal').classList.remove('hidden');
-                startQrPolling(); // Inicia a escuta do QR Code
             }
         }
 
         function closeAdmin() {
             document.getElementById('admin-modal').classList.add('hidden');
-            stopQrPolling(); // Para a escuta do QR Code para economizar banda
         }
 
-        // Salva as alterações feitas no cardápio de volta para o Gist
+        // Salva as alterações mesclando os inputs com o JSON das categorias
         async function saveMenu() {
             const password = document.getElementById('admin-pass').value;
-            let updatedJson;
+            const nameInput = document.getElementById('admin-restaurant-name').value.trim();
+            const phoneInput = document.getElementById('admin-phone').value.trim();
+            let categoriesJson;
 
             try {
-                updatedJson = JSON.parse(document.getElementById('menu-json-editor').value);
+                categoriesJson = JSON.parse(document.getElementById('menu-json-editor').value);
             } catch (e) {
-                alert("JSON inválido! Verifique a sintaxe antes de salvar.");
+                alert("O JSON de produtos está inválido! Verifique a sintaxe.");
                 return;
             }
+
+            if (!nameInput || !phoneInput) {
+                alert("Por favor, preencha o nome do restaurante e o número do WhatsApp.");
+                return;
+            }
+
+            // Monta o objeto final do cardápio de forma organizada
+            const finalMenuData = {
+                restaurantName: nameInput,
+                phone: phoneInput,
+                categories: categoriesJson
+            };
 
             const response = await fetch('/api/menu', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password, menuData: updatedJson })
+                body: JSON.stringify({ password, menuData: finalMenuData })
             });
 
             const result = await response.json();
             if (result.success) {
-                alert("Cardápio atualizado com sucesso!");
+                alert("Configurações atualizadas com sucesso!");
                 closeAdmin();
                 loadMenu();
             } else {
