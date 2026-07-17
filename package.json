@@ -1,17 +1,14 @@
 {
   "name": "cardapio-simples",
   "version": "1.0.0",
-  "description": "Cardapio digital com Gist e WhatsApp Bot",
+  "description": "Cardapio digital com Gist",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.20",
     "axios": "^1.6.0",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "pino": "^9.0.0",
-    "qrcode": "^1.5.3"
+    "express": "^4.18.2"
   }
 }
